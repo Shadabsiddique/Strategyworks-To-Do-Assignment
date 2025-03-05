@@ -1,78 +1,108 @@
 import React, { useState, useEffect } from "react";
-import { DragDropContext } from "react-beautiful-dnd";
-import { fetchTodos, updateTodo, addTodo } from "./api";
-import Lane from "./components/Lane";
-import "./style.css";
+import axios from "axios";
+import AddTodoForm from "./components/AddTodoForm";
+import TodoLane from "./components/TodoLane";
+import "./App.css";
 
-const lanes = {
-  PENDING: "Pending",
-  IN_PROGRESS: "In Progress",
-  COMPLETED: "Completed",
-};
+const API_URL = "https://dummyjson.com/todos";
 
 const App = () => {
   const [todos, setTodos] = useState([]);
-  const [newTodo, setNewTodo] = useState("");
+  const [draggedTodo, setDraggedTodo] = useState(null);
 
+  // Fetch todos from the API
   useEffect(() => {
-    fetchTodos().then((data) => setTodos(data));
+    axios
+      .get(API_URL)
+      .then((response) => {
+        console.log("API Response:", response.data); // Log the response
+        setTodos(response.data.todos); // Set the todos array
+      })
+      .catch((error) => {
+        console.error("Error fetching todos:", error);
+      });
   }, []);
 
-  const onDragEnd = async (result) => {
-    const { source, destination, draggableId } = result;
-    if (!destination) return;
-
-    const updatedTodos = todos.map((todo) =>
-      todo.id.toString() === draggableId ? { ...todo, status: destination.droppableId } : todo
-    );
-
-    setTodos([...updatedTodos]); // Ensure state updates
-    await updateTodo(draggableId, { status: destination.droppableId });
+  // Handle drag start
+  const handleDragStart = (e, todo) => {
+    setDraggedTodo(todo);
+    e.dataTransfer.setData("text/plain", todo.id);
   };
 
-  const handleAddTodo = async () => {
-    if (!newTodo.trim()) return;
-  
-    const newTask = { todo: newTodo, status: lanes.PENDING };
-  
-    const addedTodo = await addTodo(newTask);
-  
-    if (!addedTodo.id) {
-      // Ensure the added todo has a valid id
-      addedTodo.id = Date.now(); // Assign a temporary unique id
+  // Handle drag over
+  const handleDragOver = (e) => {
+    e.preventDefault();
+  };
+
+  // Handle drop
+  const handleDrop = (e, status) => {
+    e.preventDefault();
+    if (draggedTodo) {
+      const updatedTodos = todos.map((todo) =>
+        todo.id === draggedTodo.id
+          ? { ...todo, completed: status === "Completed" }
+          : todo
+      );
+      setTodos(updatedTodos);
+      setDraggedTodo(null);
     }
-  
-    setTodos([...todos, addedTodo]);
-    setNewTodo("");
   };
-  
 
-  const groupedTodos = todos.reduce((acc, todo) => {
-    const status = todo.status || lanes.PENDING;
-    if (!acc[status]) acc[status] = [];
-    acc[status].push(todo);
-    return acc;
-  }, {});
+  // Create a new todo
+  const addTodo = (title) => {
+    const newTodo = {
+      todo: title, // Use "todo" instead of "title"
+      completed: false, // Default status is "Pending"
+      userId: 1, // Default user ID
+    };
+
+    axios
+      .post(`${API_URL}/add`, newTodo)
+      .then((response) => {
+        setTodos([...todos, response.data]); // Add the new todo to the list
+      })
+      .catch((error) => {
+        console.error("Error adding todo:", error);
+      });
+  };
+
+  // Delete a todo
+  const deleteTodo = (id) => {
+    axios
+      .delete(`${API_URL}/${id}`)
+      .then(() => {
+        const updatedTodos = todos.filter((todo) => todo.id !== id);
+        setTodos(updatedTodos); // Remove the deleted todo
+      })
+      .catch((error) => {
+        console.error("Error deleting todo:", error);
+      });
+  };
+
+  // Group todos by status
+  const groupedTodos = {
+    Pending: todos.filter((todo) => !todo.completed), // "Pending" todos
+    Completed: todos.filter((todo) => todo.completed), // "Completed" todos
+  };
 
   return (
-    <DragDropContext onDragEnd={onDragEnd}>
-      <div className="app-container">
-        <div className="add-todo">
-          <input
-            type="text"
-            value={newTodo}
-            onChange={(e) => setNewTodo(e.target.value)}
-            placeholder="Add a new task..."
+    <div className="app">
+      <h1>StrategyWerks Todo Board</h1>
+      <AddTodoForm addTodo={addTodo} />
+      <div className="todo-board">
+        {Object.entries(groupedTodos).map(([status, todos]) => (
+          <TodoLane
+            key={status}
+            status={status}
+            todos={todos}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            deleteTodo={deleteTodo}
           />
-          <button onClick={handleAddTodo}>Add Todo</button>
-        </div>
-        <div className="board">
-          {Object.keys(lanes).map((lane) => (
-            <Lane key={lane} status={lanes[lane]} todos={groupedTodos[lanes[lane]] || []} setTodos={setTodos} />
-          ))}
-        </div>
+        ))}
       </div>
-    </DragDropContext>
+    </div>
   );
 };
 

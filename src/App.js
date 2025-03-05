@@ -6,21 +6,28 @@ import "./App.css";
 
 const API_URL = "https://dummyjson.com/todos";
 
-const App = () => {
+const useTodos = () => {
   const [todos, setTodos] = useState([]);
-  const [draggedTodo, setDraggedTodo] = useState(null);
 
   useEffect(() => {
-    axios
-      .get(API_URL)
-      .then((response) => {
+    const fetchTodos = async () => {
+      try {
+        const response = await axios.get(API_URL);
         console.log("API Response:", response.data);
         setTodos(response.data.todos);
-      })
-      .catch((error) => {
+      } catch (error) {
         console.error("Error fetching todos:", error);
-      });
+      }
+    };
+
+    fetchTodos();
   }, []);
+
+  return [todos, setTodos];
+};
+
+const useDragAndDrop = (todos, setTodos) => {
+  const [draggedTodo, setDraggedTodo] = useState(null);
 
   const handleDragStart = (e, todo) => {
     setDraggedTodo(todo);
@@ -44,38 +51,41 @@ const App = () => {
     }
   };
 
-  const addTodo = (title) => {
+  return { handleDragStart, handleDragOver, handleDrop };
+};
+
+const App = () => {
+  const [todos, setTodos] = useTodos();
+  const { handleDragStart, handleDragOver, handleDrop } = useDragAndDrop(todos, setTodos);
+
+  const addTodo = async (title) => {
     const newTodo = {
-      todo: title, 
-      completed: false, 
-      userId: 1, 
+      todo: title,
+      completed: false,
+      userId: 1,
     };
 
-    axios
-      .post(`${API_URL}/add`, newTodo)
-      .then((response) => {
-        setTodos([...todos, response.data]); 
-      })
-      .catch((error) => {
-        console.error("Error adding todo:", error);
-      });
+    try {
+      const response = await axios.post(`${API_URL}/add`, newTodo);
+      setTodos([response.data, ...todos]);
+    } catch (error) {
+      console.error("Error adding todo:", error);
+    }
   };
 
-  const deleteTodo = (id) => {
-    axios
-      .delete(`${API_URL}/${id}`)
-      .then(() => {
-        const updatedTodos = todos.filter((todo) => todo.id !== id);
-        setTodos(updatedTodos); 
-      })
-      .catch((error) => {
-        console.error("Error deleting todo:", error);
-      });
+  const deleteTodo = async (id) => {
+    try {
+      await axios.delete(`${API_URL}/${id}`);
+      const updatedTodos = todos.filter((todo) => todo.id !== id);
+      setTodos(updatedTodos);
+    } catch (error) {
+      console.error("Error deleting todo:", error);
+    }
   };
 
   const groupedTodos = {
-    Pending: todos.filter((todo) => !todo.completed), 
-    Completed: todos.filter((todo) => todo.completed), 
+    Pending: todos.filter((todo) => !todo.completed),
+    Completed: todos.filter((todo) => todo.completed),
   };
 
   return (
